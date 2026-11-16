@@ -1,0 +1,39 @@
+#!/usr/bin/env php
+<?php
+
+/**
+ * KnoxCall CLI — `knoxcall login` / `logout` / `whoami` / `init` (PARITY §13).
+ *
+ * Thin process shim: all logic lives in src/Cli and is unit-tested there.
+ * Credentials are stored in the cross-SDK ~/.knoxcall/credentials.json file
+ * and picked up automatically by every KnoxCall SDK (auto-detect slot 2).
+ */
+
+declare(strict_types=1);
+
+foreach ([
+    __DIR__ . '/../vendor/autoload.php',  // repo checkout / standalone install
+    __DIR__ . '/../../../autoload.php',   // installed as a dependency (vendor/knoxcall/sdk/bin)
+] as $autoload) {
+    if (is_file($autoload)) {
+        require $autoload;
+        break;
+    }
+}
+if (!class_exists(\KnoxCall\Cli\Cli::class)) {
+    fwrite(STDERR, "error: could not locate the Composer autoloader — run `composer install` first\n");
+    exit(1);
+}
+
+// Interrupt contract: print `aborted`, exit 1. Best-effort — ext-pcntl is
+// absent on Windows and many minimal builds; there the default SIGINT action
+// still terminates non-zero, just without the message.
+if (function_exists('pcntl_async_signals') && function_exists('pcntl_signal')) {
+    pcntl_async_signals(true);
+    pcntl_signal(SIGINT, static function (): void {
+        fwrite(STDERR, "aborted\n");
+        exit(1);
+    });
+}
+
+exit((new \KnoxCall\Cli\Cli())->run(array_slice($argv, 1)));
